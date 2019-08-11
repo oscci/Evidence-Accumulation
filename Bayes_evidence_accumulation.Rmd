@@ -1,0 +1,328 @@
+---
+title             : "Bayesian evidence accumulation: a simple way of depicting results from meta-analyses"
+shorttitle        : "Bayesian evidence accumulation"
+
+author: 
+  - name          : "Dorothy V.M. Bishop"
+    affiliation   : "1"
+    corresponding : yes    # Define only one corresponding author
+    address       : "Department of Experimental Psychology, Anna Watts Building, Radcliffe Observatory Quarter,Woodstock Road, Oxford, OX2 6GG, UK."
+    email         : "dorothy.bishop@psy.ox.ac.uk"
+  - name          : "Paul A. Thompson"
+    affiliation   : "1"
+
+affiliation:
+  - id            : "1"
+    institution   : "Department of Experimental Psychology, Anna Watts Building, Radcliffe Observatory Quarter,Woodstock Road, Oxford, OX2 6GG, UK"
+  
+
+
+abstract: |
+  
+  
+keywords          : "keywords"
+wordcount         : "X"
+
+bibliography      : ["cum_evid.bib"]
+
+floatsintext      : no
+figurelist        : no
+tablelist         : no
+footnotelist      : no
+linenumbers       : yes
+mask              : no
+draft             : no
+
+documentclass     : "apa6"
+classoption       : "man"
+output            : papaja::apa6_word
+---
+
+```{r setup, include = FALSE}
+library("papaja")
+require(tidyverse)
+require(pwr)
+require(metafor)
+require(meta)
+library(ggpubr)
+library(officer)
+library(flextable)
+
+```
+
+```{r analysis-preferences}
+# Seed for random number generation
+set.seed(42)
+knitr::opts_chunk$set(cache.extra = knitr::rand_seed)
+```
+
+Meta-analyses are widely used to synthesise evidence from clinical trials, and are increasingly also adopted to evaluate cumulative evidence in other areas. The usual approach involves depicting effect sizes of individual studies in a forest plot, and computing an overall effect size based on all the evidence [@Carter_2019].
+
+An alternative way of showing results is suggested by @Nissen_2016, who plotted cumulative log likelihood ratio for simulated study data to illustrate the impact of publication bias on acceptance of evidence. Their main goal was to demonstrate the serious impact of omitting null results from the publication record. Several lines of evidence converge to suggest that in many fields around 30 to 50 percent of study findings go unreported because they fail to obtain statistically significant results. Figure 1 illustrates the logic of the method used by Nissen et al by contrasting the log likelihood of a true group difference vs. null effect from a fictitious series of studies, depending on whether all results are reported. If, following Nissen et al, we adopt a log likelihood ratio of 4 as conclusive evidence of a true effect, then we run the risk of 'canonisation' of the effect if half the null results are omitted. Log likelihood of 4 is equivalent to the hypothesis of true effect (H1) being 54 times more likely than the null hypothesis (H0), whereas with log likelihood -4, H0 is 54 times more likely than H1. Thus when the log likelihood reaches +/-4, it is reasonable to conclude no further research is required, as the evidence is conclusive, one way or the other.
+
+To compute the log likelihood of a result, one needs to know just the alpha level (conventionally $\alpha = .05$) and the power of the study $(1 - \beta$, where $\beta$ is the false negative rate), which will depend on the effect size and sample size. In the example in Figure 1, the effect size is set at .2, which means that power can be computed directly from the sample size.  All we need to know to compute the plot shown in Figure 1 is whether or not the study obtained a result that achieved conventional levels of significance. Let us suppose we have a series of studies where $\alpha = .05$, $\beta = .275$, then table 1 shows the probabilities of different outcomes:
+
+```{r SNPs-table,fig.cap="Allocation of SNPs to candidate genes."}
+mymat<-matrix(NA,nrow=2,ncol=4)
+mymat[,1]<-c("Null result","Positive result")
+mymat[,2]<-c("(1-a) = .95","a = .05")
+mymat[,3]<-c("b = .25","(1-b) = .75")
+mymat<-as.data.frame(mymat)
+names(mymat)<-c(" ","H1 is false","H1 is true")
+
+t1<-flextable::regulartable(mymat,col_keys = c(" ","H1 is false","H1 is true"))
+#t1 = flextable::officer( data = snps_tab)
+
+
+# define borders
+big_border = fp_border(color="black", width = 2)
+t1<-flextable::border_remove(t1)
+#t1 <- border_outer(t1, part="all", border = big_border )
+t1 <- hline_bottom( t1, border = big_border )
+t1 <- hline_top( t1, border = big_border, part = "all" )
+t1 <- autofit(t1)
+t1 <- width(t1, width = 2)
+t1 <- align( t1, align = "left", part = "all" )
+t1 <- font(t1, fontname = "Times")
+t1 <- italic(t1, italic = TRUE, part = "body")
+
+
+t1 <- flextable::display(t1, i = 1, col_key = "H1 is false", 
+    pattern = "(1-{{val}})=.95", part = "body",
+    formatters = list(val ~ as.character("\u03b1")),
+    fprops = list(pow = fp_text(vertical.align = "superscript", font.size = 8))
+    )
+t1 <- flextable::display(t1, i = 2, col_key = "H1 is false", 
+    pattern = "({{val}})=.05", part = "body",
+    formatters = list(val ~ as.character("\u03b1")),
+    fprops = list(pow = fp_text(vertical.align = "superscript", font.size = 8))
+    )
+t1 <- flextable::display(t1, i = 1, col_key = "H1 is true", 
+    pattern = "{{val}}=.25", part = "body",
+    formatters = list(val ~ as.character("\u03b2")),
+    fprops = list(pow = fp_text(vertical.align = "superscript", font.size = 8))
+    )
+t1 <- flextable::display(t1, i = 2, col_key = "H1 is true", 
+    pattern = "(1-{{val}})=.75", part = "body",
+    formatters = list(val ~ as.character("\u03b2")),
+    fprops = list(pow = fp_text(vertical.align = "superscript", font.size = 8))
+    )
+t1
+```
+
+Then, given a null result, the log likelihood of H1 relative to H0 is $\log(.25/.95) = -1.33$.
+Given a positive result, the log likelihood of H1 relative to H0 is $\log(.75/.05) = 2.70$.
+
+This example illustrates that just two well-powered studies with positive results can give strong evidence for the robustness of a positive result, but only if there are no null results. In practice, studies are often underpowered, especially in areas outside clinical trials, meaning more evidence needs to cumulate to give confidence in an effect. For instance, if we set power, $(1 - \beta)$, to .3 in the example above, then log odds in favour of H1 is -.068 with a null result, and 1.79 with a positive result.  In the cumulative plot, then, we can plot evidence from a series of studies by cumulating the log likelihood values, so with each new study we build on the evidence obtained to date. If we specify a constant effect size, then the power is a simple function of sample size, reflected in the size of the steps up and down in the series of log likelihoods.
+
+```{r readdata,echo=F,message=F,warning=F}
+
+mydata<-read_csv("MindsetMeta2a.csv")
+mydata<-mydata[order(mydata$Document_ID),]
+colnames(mydata)[33]<-'Cohen_d'
+#create a column for dates
+mydata$year<-NA
+for (i in 1:nrow(mydata)){
+  mybit<-mydata$Reference[i]
+
+k<- str_extract_all(mybit, "\\([^()]+\\)")[[1]]
+mydata$year[i] <- substring(k, 2, nchar(k)-1)
+}
+#one is dated 'n.d.'. Maybe unpublished? Just give arbitrary year.
+w<-which(mydata$year=='n.d.')
+mydata$year[w]<-'2017'
+mydata<-mydata[order(mydata$year),] # change 'year' to 'Cohen_d' to match original forest plot.
+#the study by Burnette which was not dated (n.d.) was included in Costa study with date of 2017, so subsitute that here.
+
+```
+
+
+```{r computepower,echo=F,message=F,warning=F}
+
+bayesplot_info<-function(effsize,data,a)
+{
+data$power<-NA
+for (i in 1:nrow(data)){
+thispower<-pwr.t.test(n = data$N[i], d = effsize, sig.level = a,type = c("two.sample")) 
+data$power[i]<-thispower$power
+
+#compute if sig or not
+data$critical<-data$Cohen_d-1.96*sqrt(data$'Adjusted Variance')
+data$sigcheck<-0
+w<-which(data$critical>0)
+data$sigcheck[w]<-1
+siglist<-data$Reference[w]
+}
+#power<-data$power
+Y <- data$sigcheck
+
+k<-length(Y)-1
+q0 <- 0.5
+
+lo<-rep(0,k+1)
+
+for (t in 2:(k+1)){
+  b<-1-data$power[(t-1)]
+  if (Y[t]==1){
+    lo[t]<-lo[t-1]+log((1-b)/a)
+  }
+  if (Y[t]==0){
+    lo[t]<-lo[t-1]+log(b/(1-a))
+  }
+
+}
+
+return(lo)
+}
+
+
+
+mydata2<-mydata
+mydata2$lo_0.1<-bayesplot_info(effsize = 0.1,data = mydata2, a = 0.05)
+mydata2$lo_0.2<-bayesplot_info(effsize = 0.2,data = mydata2, a = 0.05)
+mydata2$lo_0.5<-bayesplot_info(effsize = 0.5,data = mydata2, a = 0.05)
+
+mydata2<-gather(mydata2,key="Effect_size",value="lo",lo_0.1:lo_0.5)  
+
+
+
+```
+
+
+
+```{r bayesplot,echo=F,message=F,warning=F}
+
+mydata2$Reference<-factor(mydata$Reference, levels = unique(mydata$Reference))
+
+mydata2$Effect_size<-factor(mydata2$Effect_size)
+levels(mydata2$Effect_size) <- c("0.1","0.2","0.5")
+
+g1<-ggplot(mydata2,aes(x=Reference,y=lo,colour=Effect_size))+geom_point(alpha=0.5)+geom_line(aes(group=Effect_size))+xlab('Study')+ylab('Log odds of true effect')+
+geom_hline(yintercept = 3,linetype="dashed")+
+geom_hline(yintercept=-3,linetype="dashed")+
+geom_hline(yintercept=0,colour='gray')+ theme_bw() +theme(axis.text.y = element_text(hjust = 1,size=8),legend.position = 'left',axis.title.y = element_blank(),axis.title.x = element_text(size=8))+coord_flip()+ labs(colour = "Effect size")
+
+```
+
+
+```{r metaforest,echo=F,message=F,warning=F,fig.height=6,fig.cap="Meta-analytic plots showing Nissen cumulative evidence (left) and forest plot (right) for @Sisk_2018"}
+
+##https://rpubs.com/mcmurdie/ggforest
+
+ggforest = function(x){
+  require("ggplot2")
+  # Function to convert REM results in `rma`-format into a data.frame
+  rma2df = function(x){
+    rbind(
+      data.frame(Study = "RE Model", Cohen_d = x$b, CILB=x$ci.lb, CIUB=x$ci.ub,
+                 p = x$pval,
+                 stringsAsFactors = FALSE),
+      data.frame(Study = x$slab, Cohen_d = x$yi, 
+                 CILB=x$yi - 2*sqrt(x$vi),
+                 CIUB=x$yi + 2*sqrt(x$vi), 
+                 p = x$pval,
+                 stringsAsFactors = FALSE)
+    )
+  }
+  remresdf = rma2df(x)
+  remresdf <- transform(remresdf, interval = CIUB - CILB)
+  remresdf <- transform(remresdf, RelConf = 1/interval)
+  remresdf$Study<-factor(remresdf$Study, levels = unique(mydata$Reference))
+  remresdf<-remresdf[-1,]
+  p = ggplot(remresdf, 
+             aes(Cohen_d, Study, xmax=CIUB, xmin=CILB)) + 
+    coord_cartesian(xlim=c(-2, 2)) +
+    #scale_alpha_discrete(range = c(0.2, 1)) +
+    geom_vline(xintercept = 0.0, linetype=2, alpha=0.75) +
+    geom_errorbarh(alpha=0.5, color="black") + 
+    geom_point(aes(size = RelConf),alpha=0.5) +
+    geom_point(data = subset(remresdf, Study=="RE Model"), size=7) +
+    scale_size(range = c(2, 5), guide=FALSE) +
+    theme_bw() + 
+    theme(text = element_text(size=12))+ theme(axis.text.y = element_blank(),axis.title.y=element_blank(),axis.ticks.y = element_blank())
+  return(p)
+}
+
+meta_res<-rma(yi=mydata$Cohen_d, vi=mydata$'Adjusted Variance')
+meta_res$slab<-mydata$Reference
+g2 <- ggforest(meta_res)
+
+ggarrange(g1,g2,common.legend = TRUE,ncol=2,widths=c(3,1))
+```
+
+An additional point made by @Nissen_2016 is that alpha levels may be underestimated when there is p-hacking, i.e., when flexibility in data analysis means that the published results are selected from a larger pool of obtained results, without any correction for multiple testing. For instance, if a researcher has five possible outcome measures, only one of which reaches p < .05, and selectively reports just that outcome, then the effective alpha level is much higher than .05. This is because under the null hypothesis, the probability that any one of the measures has an associated p-value $< .05 is 1-(.95^5) = .226$.   If we recompute the log likelihoods with $\alpha = .226$ and $(1 - \beta) = .75$, then the then log odds in favour of H1 is -1.12 with a null result, and 1.19 with a positive result. Selection of variables is not the only way in which p-values can be cherry-picked to give a significant result: other methods include focusing on specific subgroups for analysis, flexible use of covariates or outlier definition, and stopping data collection when a significant result is found. Because there are so many possible ways of p-hacking, it is seldom possible to estimate a corrected alpha level accurately, so the best that can be done is to demonstrate how results vary at different levels of effective alpha.
+
+In the plots shown in Figure \@ref(fig:metaforest), the starting point for the log likelihood plot was zero, corresponding to a prior belief that H0 and H1 are equally likely. This could, however, be changed.  Suppose, for instance, we were reviewing a series of studies of a phenomenon that appears to contradict the known laws of science, such as ESP (Bem, xxxx) or astrology (xxxx). We could generate the same plot, but from a low starting prior level. In effect, this indicates that extraordinary claims require extraordinary evidence. 
+
+The method adopted by @Nissen_2016 is easy to apply to results of existing meta-analyses, provided we have data from a table or a forest plot that provides the sample size and a binary categorisation of whether or not the 95% confidence interval of the effect exceeded zero (or conventionally, whether the result was statistically significant). Then, as illustrated in the example above, we specify a smallest effect size of interest, which can be used to compute the power from the sample size. We can then compute the cumulative likelihood plot. The chronological order of the studies does not affect the final point of the plot, but it is worth plotting the studies in order, as this can reveal trends over time, as illustrated in some of the examples below.  The commonest trend is for "winner's curse", where an initial large result is published, but with subsequent failure to replicate.
+
+In practice, studies are often heterogeneous in terms of sampling and measurements. The format adopted here can readily be adapted to depict such variation in the colour and shape of the points, making it possible to detect by eye any patterns in results. Similarly, one can label points to denote where, for instance, studies come from specific research groups.
+
+```{r bayesplot2,echo=F,message=F,warning=F,fig.height=6, fig.cap = "Plot comparing Nissen cumulative evidence at different false positive rates alpha = 0.05, 0.1 and 0.3 for @Sisk_2018"}
+
+mydata3<-mydata
+
+mydata3$lo_0.05a<-bayesplot_info(effsize = 0.2,data = mydata, a = 0.05)
+mydata3$lo_0.1a<-bayesplot_info(effsize = 0.2,data = mydata, a = 0.1)
+mydata3$lo_0.3a<-bayesplot_info(effsize = 0.2,data = mydata, a = 0.3)
+
+mydata3<-gather(mydata3,key="Alpha",value="lo",lo_0.05a:lo_0.3a)  
+
+mydata3$Reference<-factor(mydata$Reference, levels = unique(mydata$Reference))
+
+mydata3$Alpha<-factor(mydata3$Alpha)
+levels(mydata3$Alpha) <- c("0.05","0.1","0.3")
+
+ggplot(mydata3,aes(x=Reference,y=lo,colour=Alpha))+geom_line(aes(group=Alpha))+geom_point(alpha=0.5)+xlab('Study')+ylab('Log odds of true effect')+
+geom_hline(yintercept = 3,linetype="dashed")+
+geom_hline(yintercept=-3,linetype="dashed")+
+geom_hline(yintercept=0,colour='gray')+ theme_bw() + theme(text = element_text(size=10),axis.text.y = element_text(hjust = 1,size=8),legend.position = 'top',axis.title.y = element_blank(),axis.title.x = element_text(size=8))+coord_flip()+ labs(colour = paste0("False Positive Rate (","\u03b1",")"))
+
+
+```
+
+The method also lends itself to a 'worse case scenario' analysis that takes into account the likely rate of publication bias and p-hacking. Because both of these practices are widespread, it is worth considering how the plot would change if the number of null results were doubled. Also, where study protocols are not pre-registered, p-hacking is likely, and this effect can be visualised by doubling or quadrupling the alpha level; see \@ref(fig:bayesplot2).
+
+
+# Methods
+@Sisk_2018
+
+## Material
+
+## Procedure
+
+## Data analysis
+
+
+
+
+
+
+
+
+
+
+
+
+# Results
+
+
+
+
+
+# Discussion
+
+
+\newpage
+
+# References
+```{r create_r-references}
+r_refs(file = "cum_evid.bib")
+```
+
+\begingroup
+\setlength{\parindent}{-0.5in}
+\setlength{\leftskip}{0.5in}
+
+<div id = "refs"></div>
+\endgroup
